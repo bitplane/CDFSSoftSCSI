@@ -112,8 +112,11 @@ _kernel_oserror *module_final(int fatal, int podule, void *pw)
 
 	/* Deregister */
 	e = _swix(CD_Unregister,_INR(0,1),&driver_info,driver_handler);
+	/* Ignore any errors (CDFSDriver can be killed without our knowledge, which will result in any unregister attempts failing) */
+#ifdef DEBUGLIB
 	if(e)
-		goto error;
+		dprintf(("","Warning - Failed to unregister with CDFSDriver. Error %x %s\n",e->errnum,e->errmess));
+#endif
 
 	/* Close messages */
 	_swix(MessageTrans_CloseFile,_IN(0),&messages);
@@ -123,8 +126,4 @@ _kernel_oserror *module_final(int fatal, int podule, void *pw)
 #endif
 
 	return NULL;
-
-error:
-	dprintf(("","Failed finalisation: %s\n", e->errmess));
-	return e;
 }

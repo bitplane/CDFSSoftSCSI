@@ -59,7 +59,21 @@ static const uint32_t BlockSizes[DataMode_MAX] =
 
 #define MAX_READDATA_BLOCKS 32 /* Max number of blocks to read at once */
 
+/* Extra debugging - show all mode sense results */
+//#define EXTRADEBUG
+
 /* Utility functions */
+
+#ifdef DEBUGLIB
+static void DumpBlock(const uint8_t *block,uint32_t size)
+{
+	while(size--)
+		dprintf((""," %02x",*block++));
+	dprintf(("","\n"));
+}
+#else
+#define DumpBlock(A,B) (void) 0
+#endif
 
 static uint8_t *FindModePage(uint8_t *pages,uint32_t size,PageCode page)
 {
@@ -128,10 +142,7 @@ static _kernel_oserror *DoSCSIOp(uint32_t typeandflags,const uint8_t *scb,size_t
 #ifdef DEBUGLIB
 	dprintf(("","  SCSI_Op: type %02x dev %d:%d.%d scblen %d buffer %p buflen %d timeout %d retries %d\n",typeandflags,blk->card,blk->device,blk->lun,scblen,buffer,buflen,timeout,retries));
 	dprintf(("","  SCB:"));
-	int i;
-	for(i=0;i<scblen;i++)
-		dprintf((""," %02x",scb[i]));
-	dprintf(("","\n"));
+	DumpBlock(scb,scblen);
 #endif
 	do {
 		uint32_t remaining;
@@ -181,10 +192,9 @@ static _kernel_oserror *ModeSense(PageCode page,uint32_t *result,const cdfs_ctl_
 		dprintf(("", " Only %d bytes returned in response to MODESENSE10!\n",*result));
 		return ERROR(BadResponse);
 	}
-#if defined(DEBUGLIB) && 0
+#if defined(DEBUGLIB) && defined(EXTRADEBUG)
 	dprintf((""," MODE SENSE response (page %02x):\n",page));
-	for(int i=0;i<*result;i++)
-		dprintf(("","  %02x: %02x\n",i,SCSIOp_MiscBuffer[i]));
+	DumpBlock(SCSIOp_MiscBuffer,*result);
 #endif
 	if(MODEPARAMHEADER10_BlockDescLen_Read(SCSIOp_MiscBuffer))
 	{
@@ -214,16 +224,19 @@ static _kernel_oserror *ReadSubChannel(const cdfs_ctl_block_t *blk,uint32_t retr
 	if(result != 16)
 	{
 		dprintf((""," Bad number of bytes returned by READ SUB-CHANNEL (%d)\n",result));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
-	if(SUBQHEADER_DataLength_Read(SCSIOp_MiscBuffer) != 12)
+	if(SUBQHEADER_DataLength_Read(SCSIOp_MiscBuffer) < 12)
 	{
 		dprintf((""," Bad data length (%d)\n",SUBQHEADER_DataLength_Read(SCSIOp_MiscBuffer)));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	if(SUBQ_CDPOS_FormatCode_Read(SCSIOp_MiscBuffer+4) != SubChannelParam_CDPos)
 	{
 		dprintf((""," Returned data isn't for CDPos!\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	return NULL;
@@ -313,14 +326,16 @@ static _kernel_oserror *ReadTrackInformation(uint32_t addr,DataMode *datamode,co
 	if(e)
 		return e;
 	dprintf((""," READ TRACK INFORMATION of %08x:\n",addr));
-	if(result < 36) /* Size as per MMC2 */
+	if(result < 28) /* Size as per MMC1 */
 	{
 		dprintf((""," READ TRACK INFO only returned %d bytes!\n",result));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
-	if(TRACKINFO_DataLength_Read(SCSIOp_MiscBuffer) < 34) /* Size as per MMC2 */
+	if(TRACKINFO_DataLength_Read(SCSIOp_MiscBuffer) < 26) /* Size as per MMC1 */
 	{
 		dprintf((""," READ TRACK INFO data length is only %d bytes!\n",TRACKINFO_DataLength_Read(SCSIOp_MiscBuffer)));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	/* Check the data mode and track mode fields */
@@ -343,7 +358,8 @@ static _kernel_oserror *ReadTrackInformation(uint32_t addr,DataMode *datamode,co
 		*datamode = DataMode_Data2Form1;
 		return NULL;
 	default:
-		dprintf((""," Unknown data mode! %x\n",TRACKINFO_DataMode_Read(SCSIOp_MiscBuffer)));
+		dprintf((""," Unknown data mode!\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		/* Just claim it's mode 1? */
 		*datamode = DataMode_Data1;
 		return NULL;
@@ -369,6 +385,7 @@ static _kernel_oserror *ReadHeader(uint32_t addr,DataMode *datamode,const cdfs_c
 	if(result != 8)
 	{
 		dprintf((""," READHEADER only returned %d bytes!\n",result));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	switch(READHEADERLBA_DataMode_Read(SCSIOp_MiscBuffer))
@@ -385,7 +402,8 @@ static _kernel_oserror *ReadHeader(uint32_t addr,DataMode *datamode,const cdfs_c
 		*datamode = DataMode_Data2Form1;
 		return NULL;
 	default:
-		dprintf((""," Unknown data mode! %x\n",READHEADERLBA_DataMode_Read(SCSIOp_MiscBuffer)));
+		dprintf((""," Unknown data mode!\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 }
@@ -415,6 +433,7 @@ static _kernel_oserror *driver_GetParameters(cdfs_parameters_t *params,const cdf
 	else if(MODEPAGEHDR_PageLength_Read(page) < 0x06)
 	{
 		dprintf(("", " Unexpected 0x0d page length\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	else
@@ -426,11 +445,13 @@ static _kernel_oserror *driver_GetParameters(cdfs_parameters_t *params,const cdf
 	if(!page)
 	{
 		dprintf(("", " Couldn't find page 0x01\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	else if(MODEPAGEHDR_PageLength_Read(page) < 0x0a)
 	{
 		dprintf(("", " Unexpected 0x01 page length\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	params->readretrycount = MODEPAGE_RWER_ReadRetryCount_Read(page);
@@ -440,11 +461,13 @@ static _kernel_oserror *driver_GetParameters(cdfs_parameters_t *params,const cdf
 	if(!page)
 	{
 		dprintf(("", " Couldn't find page 0x2a\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	else if(MODEPAGEHDR_PageLength_Read(page) < 28)
 	{
 		dprintf(("", " Unexpected 0x2a page length\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	params->speed = SCSI_READBYTES2(page,14)/176; /* XXX obsolete! */
@@ -493,6 +516,7 @@ static _kernel_oserror *driver_SetParameters(const cdfs_parameters_t *params,con
 		else if(MODEPAGEHDR_PageLength_Read(page) < 0x06)
 		{
 			dprintf(("", " Unexpected 0x0d page length\n"));
+			DumpBlock(SCSIOp_MiscBuffer,result);
 			return ERROR(BadResponse);
 		}
 		else
@@ -502,8 +526,13 @@ static _kernel_oserror *driver_SetParameters(const cdfs_parameters_t *params,con
 			MODESELECT10_ParamListLength_Write(SCB,result);
 			e = DoSCSIOp(SCSIOP_WRITE|SCSIOP_NOESCAPE,SCB,sizeof(SCB),SCSIOp_MiscBuffer,result,0,&result2,blk,retries);
 			if(e)
-				return e;
-			if(result2 != result)
+			{
+				/* Illegal request will be returned if the field(s) are read-only. Ignore it. */
+				if(e->errnum != ErrorNumber_SCSI_CC_IllegalRequest)
+					return e;
+				dprintf(("", " Looks like inactivity timer multiplier is read-only\n"));
+			}
+			else if(result2 != result)
 			{
 				dprintf(("", " Device didn't accept all the data! (CDDeviceParameters)\n"));
 				return ERROR(BadResponse);
@@ -518,11 +547,13 @@ static _kernel_oserror *driver_SetParameters(const cdfs_parameters_t *params,con
 	if(!page)
 	{
 		dprintf(("", " Couldn't find page 0x01\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
-	else if(MODEPAGEHDR_PageLength_Read(page) < 0x06)
+	else if(MODEPAGEHDR_PageLength_Read(page) < 0x0a)
 	{
 		dprintf(("", " Unexpected 0x01 page length\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	MODEPAGE_RWER_ReadRetryCount_Write(page,params->readretrycount);
@@ -530,8 +561,13 @@ static _kernel_oserror *driver_SetParameters(const cdfs_parameters_t *params,con
 	MODESELECT10_ParamListLength_Write(SCB,result);
 	e = DoSCSIOp(SCSIOP_WRITE|SCSIOP_NOESCAPE,SCB,sizeof(SCB),SCSIOp_MiscBuffer,result,0,&result2,blk,retries);
 	if(e)
-		return e;
-	if(result2 != result)
+	{
+		/* Illegal request will be returned if the field(s) are read-only. Ignore it. */
+		if(e->errnum != ErrorNumber_SCSI_CC_IllegalRequest)
+			return e;
+		dprintf(("", " Looks like read retry count is read-only\n"));
+	}
+	else if(result2 != result)
 	{
 		dprintf(("", " Device didn't accept all the data! (ReadWriteErrorRecovery)\n"));
 		return ERROR(BadResponse);
@@ -580,7 +616,7 @@ static _kernel_oserror *driver_EnquireDataMode(AddrMode mode,uint32_t addr,DataM
 	_kernel_oserror *e = _swix(CD_ConvertToLBA,_INR(0,1)|_IN(7)|_OUT(1),mode,addr,blk,&addr);
 	if(e)
 		return e;
-	/* There are two commands for finding the track type - READ HEADER (MMC 1), and READ TRACK INFORMATION (MMC 2+)
+	/* There are two commands for finding the track type - READ HEADER (MMC 1, CD only), and READ TRACK INFORMATION (MMC 2+, or MMC 1 for CD-R/RW)
 	   Try using READ TRACK INFORMATION first, then fall back to READ HEADER if it fails (mostly likely due to being an old drive) */
 	e = ReadTrackInformation(addr,datamode,blk,retries);
 	if(e && (e->errnum == ErrorNumber_SCSI_CC_IllegalRequest))
@@ -691,6 +727,7 @@ static _kernel_oserror *driver_EnquireTrackRange(cdfs_trackrange_t *range,const 
 	if(result != 12)
 	{
 		dprintf((""," READTOC only returned %d bytes!\n",result));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	range->first = READTOCRESPONSE_FirstTrack_Read(SCSIOp_MiscBuffer);
@@ -718,6 +755,7 @@ static _kernel_oserror *driver_EnquireTrackInfo(uint32_t track,cdfs_trackinfo_t 
 	if(result != 12)
 	{
 		dprintf((""," READTOC only returned %d bytes!\n",result));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	info->startlba = READTOCRESPONSE_StartLBA_Read(SCSIOp_MiscBuffer);
@@ -820,9 +858,10 @@ static _kernel_oserror *driver_DiscHasChanged(const cdfs_ctl_block_t *blk,uint32
 static _kernel_oserror *driver_Supported(uint32_t *flags,const cdfs_ctl_block_t *blk,uint32_t retries)
 {
 	/* TODO - return number of speeds supported by drive? */
+	/* TODO - query drive for whether these are actually supported */
 	(void)blk;
 	(void)retries;
-	*flags = SUPPORTED_AUDIOCONTROL_PREFETCH | SUPPORTED_AUDIOCONTROL_CLOSEDRAWER | SUPPORTED_AUDIOCONTROL_AUDIOLEVEL | SUPPORTED_AUDIOCONTROL_READAUDIO | SUPPORTED_AUDIOCONTROL_GETSETAUDIOPARMS | (255<<6);
+	*flags = SUPPORTED_PREFETCH | SUPPORTED_CLOSEDRAWER | SUPPORTED_AUDIOLEVEL | SUPPORTED_READAUDIO | SUPPORTED_GETSETAUDIOPARMS | (255<<6);
 	return NULL;
 }
 
@@ -853,12 +892,11 @@ static _kernel_oserror *driver_Identify(const uint8_t *inquiry,DriveType *type,c
 	(void)retries;
 	*type = DriveType_Unknown;
 	/* Check the first byte of the inquiry result to see if this is an MMC device */
-#if defined(DEBUGLIB) && 0
+#if defined(DEBUGLIB)
 	if(inquiry)
 	{
 		dprintf((""," Inquiry response data:\n"));
-		for(int i=0;i<36;i++)
-			dprintf(("","  %02x: %02x\n",i,inquiry[i]));
+		DumpBlock(inquiry,36);
 	}
 #endif
 	if(inquiry && (*inquiry == 5)) /* Peripheral device type = MMC, peripheral qualifier = 0 */
@@ -915,11 +953,13 @@ static _kernel_oserror *driver_GetAudioParms_VolumeLevels(cdfs_audioparm_volleve
 	if(!page)
 	{
 		dprintf(("", " Couldn't find page 0x0e\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	else if(MODEPAGEHDR_PageLength_Read(page) < 0x0e)
 	{
 		dprintf(("", " Unexpected 0x0e page length\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	/* Return the volume levels, scaled up to 16 bit
@@ -933,7 +973,7 @@ static _kernel_oserror *driver_SetAudioParms_VolumeLevels(const cdfs_audioparm_v
 {
 	if(!levels)
 		return ERROR(BadArgs);
-	if((levels->volumes[0] >= 0x10000) || (levels->volumes[1] >= 0x1000))
+	if((levels->volumes[0] >= 0x10000) || (levels->volumes[1] >= 0x10000))
 		return ERROR(BadArgs);
 	/* Read the current parameters */
 	uint32_t result;
@@ -946,11 +986,13 @@ static _kernel_oserror *driver_SetAudioParms_VolumeLevels(const cdfs_audioparm_v
 	if(!page)
 	{
 		dprintf(("", " Couldn't find page 0x0e\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	else if(MODEPAGEHDR_PageLength_Read(page) < 0x0e)
 	{
 		dprintf(("", " Unexpected 0x0e page length\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
 	/* Write the new values */
@@ -998,6 +1040,7 @@ static _kernel_oserror *driver_ReadData(AddrMode mode,uint32_t start,uint32_t nu
 		if(result != 12)
 		{
 			dprintf(("","  READTOC only returned %d bytes!\n",result));
+			DumpBlock(SCSIOp_MiscBuffer,result);
 			return ERROR(BadResponse);
 		}
 		dprintf(("","  Applying offset of %08x\n",READTOCRESPONSE_StartLBA_Read(SCSIOp_MiscBuffer)));

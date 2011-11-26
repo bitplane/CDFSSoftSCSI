@@ -199,11 +199,11 @@ typedef enum {
 
 /* Bits 0-2 = CD_AudioControl support level (0=none)
    Bits 6-13 = Number of drive speeds, -1 */
-#define SUPPORTED_AUDIOCONTROL_PREFETCH		0x0008 /* CDOp_Prefetch */
-#define SUPPORTED_AUDIOCONTROL_CLOSEDRAWER	0x0010 /* CDOp_CloseDrawer */
-#define SUPPORTED_AUDIOCONTROL_AUDIOLEVEL	0x0020 /* CDOp_AudioLevel */
-#define SUPPORTED_AUDIOCONTROL_READAUDIO	0x4000 /* CDOp_ReadAudio */
-#define SUPPORTED_AUDIOCONTROL_GETSETAUDIOPARMS	0x8000 /* CDOp_Get/SetAudioParms */
+#define SUPPORTED_PREFETCH		0x0008 /* CDOp_Prefetch */
+#define SUPPORTED_CLOSEDRAWER		0x0010 /* CDOp_CloseDrawer */
+#define SUPPORTED_AUDIOLEVEL		0x0020 /* CDOp_AudioLevel */
+#define SUPPORTED_READAUDIO		0x4000 /* CDOp_ReadAudio */
+#define SUPPORTED_GETSETAUDIOPARMS	0x8000 /* CDOp_Get/SetAudioParms */
 
 /* CDOp_Get/SetAudioParms */
 
