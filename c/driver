@@ -777,12 +777,12 @@ static _kernel_oserror *driver_PlayTrack(uint32_t start,uint32_t end,const cdfs_
 	/* Read the info of the last track */
 	if(end == PLAY_TO_END_OF_CD)
 		end = 0xaa;
-	else if(end > READTOCRESPONSE_LastTrack_Read(SCSIOp_MiscBuffer))
+	else if(start > READTOCRESPONSE_LastTrack_Read(SCSIOp_MiscBuffer))
 		return ERROR(NoSuchTrack);
-	else if(end == READTOCRESPONSE_LastTrack_Read(SCSIOp_MiscBuffer))
+	else if(start == READTOCRESPONSE_LastTrack_Read(SCSIOp_MiscBuffer))
 		end = 0xaa;
 	else
-		end++;
+		end = start+1;
 	cdfs_trackinfo_t last;
 	e = driver_EnquireTrackInfo(end,&last,blk,retries);
 	if(e)
@@ -923,7 +923,12 @@ static _kernel_oserror *driver_ReadAudio(AddrMode mode,uint32_t start,uint32_t l
 	if(bytelength >= 0x100000000) /* Too big to fit in RAM! */
 		return ERROR(BadArgs);
 	SCSI_CREATEBLOCK(SCB,READCD,12);
+#if 0
+	/* Leave DAP disabled for now - some drives complain about it, and
+	   simply retrying the op with DAP disabled can cause problems too
+	   (although that might be a SCSISoftUSB bug?) */
 	READCD12_DAP_Write(SCB,1); /* Enable DAP */
+#endif
 	READCD12_ExpSectorType_Write(SCB,1); /* CD-DA */
 	READCD12_StartLBA_Write(SCB,start);
 	READCD12_Length_Write(SCB,length);
