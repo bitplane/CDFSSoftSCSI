@@ -49,7 +49,7 @@ MessagesFD messages;
 extern void* Resources(void);
 #endif
 
-_kernel_oserror* module_init (const char *cmd_tail, int podule_base, void *pw)
+_kernel_oserror* module_init(const char *cmd_tail, int podule_base, void *pw)
 {
 	(void) cmd_tail;
 	(void) podule_base;
@@ -90,10 +90,12 @@ _kernel_oserror* module_init (const char *cmd_tail, int podule_base, void *pw)
 	driver_info.numdrivetypes = DriveType_MAX;
 	e = _swix(CD_Register,_INR(0,2),&driver_info,driver_handler,private_word);
 	if(e)
-		goto error2;
+		goto error3;
 
 	return NULL;
 
+error3:
+	_swix(MessageTrans_CloseFile,_IN(0),&messages);
 error2:
 #ifdef STANDALONE
 	_swix(ResourceFS_DeregisterFiles,_IN(0),Resources());

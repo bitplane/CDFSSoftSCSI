@@ -448,13 +448,13 @@ static _kernel_oserror *driver_GetParameters(cdfs_parameters_t *params,const cdf
 		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
-	else if(MODEPAGEHDR_PageLength_Read(page) < 0x0a)
+	else if(MODEPAGEHDR_PageLength_Read(page) < 0x06)
 	{
-		dprintf(("", " Unexpected 0x01 page length\n"));
+		dprintf(("", " Page 0x01 is shorter than both 0x06 & 0x0A variants\n"));
 		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
-	params->readretrycount = MODEPAGE_RWER_ReadRetryCount_Read(page);
+	params->readretrycount = MODEPAGE_RWER_ReadRetryCount_Read(page); /* Common offset in both forms */
 #if 0
 	/* Find page 0x2a for speed setting */
 	page = FindModePage(SCSIOp_MiscBuffer+8,result-8,PageCode_MMCapabilitiesAndManualStatus);
@@ -550,13 +550,13 @@ static _kernel_oserror *driver_SetParameters(const cdfs_parameters_t *params,con
 		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
-	else if(MODEPAGEHDR_PageLength_Read(page) < 0x0a)
+	else if(MODEPAGEHDR_PageLength_Read(page) < 0x06)
 	{
-		dprintf(("", " Unexpected 0x01 page length\n"));
+		dprintf(("", " Page 0x01 is shorter than both 0x06 & 0x0A variants\n"));
 		DumpBlock(SCSIOp_MiscBuffer,result);
 		return ERROR(BadResponse);
 	}
-	MODEPAGE_RWER_ReadRetryCount_Write(page,params->readretrycount);
+	MODEPAGE_RWER_ReadRetryCount_Write(page,params->readretrycount); /* Common offset in both forms */
 	/* Update device */
 	MODESELECT10_ParamListLength_Write(SCB,result);
 	e = DoSCSIOp(SCSIOP_WRITE|SCSIOP_NOESCAPE,SCB,sizeof(SCB),SCSIOp_MiscBuffer,result,0,&result2,blk,retries);
