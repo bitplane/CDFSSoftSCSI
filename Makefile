@@ -43,19 +43,14 @@ CMHGFILE        = modhead
 HDRS            =
 
 CINCLUDES       = -Itbox:
-CFLAGS          += -ff -wp -wc
+CFLAGS          += -wp -wc
 CMHGDEFINES     = -DCOMPONENT=${COMPONENT}
 CMHGDEPENDS     = cmodule driver
 RAMCDEFINES     = -DSTANDALONE
 
 RESFSDIR = ${RESDIR}.CDFSDriver.SCSI
-RES_PATH = Resources.CDFSDriver.SCSI.Messages
 RES_OBJ = messages
 
-include StdTools
-include ModStdRule
-include ModuleLibs
-include DbgRules
 include CModule
 
 # Dynamic dependencies:
