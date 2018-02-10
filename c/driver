@@ -109,12 +109,12 @@ static uint32_t GetDrawerStatus(const cdfs_ctl_block_t *blk)
 	return ((*byte)>>(blk->lun)) & 1;
 }
 
-static void SetDrawerStatus(const cdfs_ctl_block_t *blk,uint32_t changed)
+static void SetDrawerStatus(const cdfs_ctl_block_t *blk,uint32_t locked)
 {
 	uint8_t *byte = DrawerStatusBits+blk->device+(blk->card<<3);
 	uint8_t val = *byte;
 	uint8_t flag = 1<<blk->lun;
-	if(changed)
+	if(locked)
 		val |= flag;
 	else
 		val &= ~flag;
@@ -457,7 +457,7 @@ static _kernel_oserror *driver_GetParameters(cdfs_parameters_t *params,const cdf
 	params->readretrycount = MODEPAGE_RWER_ReadRetryCount_Read(page); /* Common offset in both forms */
 #if 0
 	/* Find page 0x2a for speed setting */
-	page = FindModePage(SCSIOp_MiscBuffer+8,result-8,PageCode_MMCapabilitiesAndManualStatus);
+	page = FindModePage(SCSIOp_MiscBuffer+8,result-8,PageCode_MMCapabilitiesAndMechanicalStatus);
 	if(!page)
 	{
 		dprintf(("", " Couldn't find page 0x2a\n"));
@@ -879,10 +879,32 @@ static _kernel_oserror *driver_IsDrawerLocked(uint32_t *locked,const cdfs_ctl_bl
 {
 	if(!locked)
 		return ERROR(BadArgs);
-	SCSI_CREATEBLOCK(SCB,TESTUNITREADY,6);
-	_kernel_oserror *e = DoSCSIOp(SCSIOP_NODATA|SCSIOP_NOESCAPE,SCB,sizeof(SCB),NULL,0,0,NULL,blk,retries);
-	if(!e)
-		*locked = GetDrawerStatus(blk);
+	/* Perform MODE SENSE 10 to get list of mode pages */
+	uint32_t result;
+	_kernel_oserror *e = ModeSense(PageCode_All,&result,blk,retries);
+	if(e)
+		return e;
+	uint8_t *page;
+	/* Find page 0x2a for lock setting */
+	page = FindModePage(SCSIOp_MiscBuffer+8,result-8,PageCode_MMCapabilitiesAndMechanicalStatus);
+	if(!page)
+	{
+		dprintf(("", " Couldn't find page 0x2a\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
+	}
+	else if(MODEPAGEHDR_PageLength_Read(page) < 28)
+	{
+		dprintf(("", " Unexpected 0x2a page length\n"));
+		DumpBlock(SCSIOp_MiscBuffer,result);
+	}
+	else
+	{
+		/* Page found, use it to update our softcopy of the lock state */
+		dprintf(("", " Locking flags: %x\n",page[6] & 3));
+		SetDrawerStatus(blk,page[6] & 2);
+	}
+	/* Return softcopy of the state (which will be the real state, if the drive supports the relevant mode page. Else assume lock state has remained the same as when we last set it) */
+	*locked = GetDrawerStatus(blk);
 	return e;
 }
 

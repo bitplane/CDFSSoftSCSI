@@ -183,7 +183,7 @@ typedef enum {
 	PageCode_ReadWriteErrorRecovery=0x01,
 	PageCode_CDDeviceParameters=0x0d,
 	PageCode_CDAudioControl=0x0e,
-	PageCode_MMCapabilitiesAndManualStatus=0x2a,
+	PageCode_MMCapabilitiesAndMechanicalStatus=0x2a,
 
 	PageCode_All = 0x3f,
 } PageCode;
