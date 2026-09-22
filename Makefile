@@ -42,8 +42,12 @@ OBJS            = cmodule handler driver errors
 CMHGFILE        = modhead
 HDRS            =
 
+ifeq (${TOOLCHAIN},GNU)
+CINCLUDES       = ${TBOXINC} ${OSINC}
+else
 CINCLUDES       = -Itbox:
 CFLAGS          += -wp -wc
+endif
 CMHGDEFINES     = -DCOMPONENT=${COMPONENT}
 CMHGDEPENDS     = cmodule driver
 RAMCDEFINES     = -DSTANDALONE
