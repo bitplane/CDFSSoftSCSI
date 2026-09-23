@@ -192,6 +192,14 @@ static _kernel_oserror *ModeSense(PageCode page,uint32_t *result,const cdfs_ctl_
 		dprintf(("", " Only %d bytes returned in response to MODESENSE10!\n",*result));
 		return ERROR(BadResponse);
 	}
+	/* The allocation length may include padding beyond the response. */
+	uint32_t declared = MODEPARAMHEADER10_ModeDataLength_Read(SCSIOp_MiscBuffer) + 2;
+	if(declared < 8 || declared > *result)
+	{
+		dprintf(("", " Invalid MODE SENSE length %d in %d transferred bytes\n",declared,*result));
+		return ERROR(BadResponse);
+	}
+	*result = declared;
 #if defined(DEBUGLIB) && defined(EXTRADEBUG)
 	dprintf((""," MODE SENSE response (page %02x):\n",page));
 	DumpBlock(SCSIOp_MiscBuffer,*result);
@@ -201,12 +209,6 @@ static _kernel_oserror *ModeSense(PageCode page,uint32_t *result,const cdfs_ctl_
 		dprintf(("", " Device returned block descriptors, even though we said not to!\n"));
 		return ERROR(BadResponse);
 	}
-#ifdef DEBUGLIB
-	/* Ideally we'd return an error for this case, but some drives do return the wrong values. Just spit out a warning instead.
-	   TODO - Should we obey the value returned by the drive, or use the number of bytes that were transferred by the SCSI op? */
-	if(MODEPARAMHEADER10_ModeDataLength_Read(SCSIOp_MiscBuffer) != 6+*result)
-		dprintf(("", " ModeDataLength doesn't add up! Drive reports %d bytes, but should be %d\n",MODEPARAMHEADER10_ModeDataLength_Read(SCSIOp_MiscBuffer),6+*result));
-#endif
 	return NULL;
 }
 
