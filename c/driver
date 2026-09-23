@@ -374,9 +374,20 @@ static _kernel_oserror *ReadHeader(uint32_t addr,DataMode *datamode,const cdfs_c
 	_kernel_oserror *e = DoSCSIOp(SCSIOP_READ|SCSIOP_NOESCAPE,SCB,sizeof(SCB),SCSIOp_MiscBuffer,8,0,&result,blk,retries);
 	if(e)
 	{
-		/* Assume any illegal request error is because it's a mode 0 disc (like Sony 561 SCSI driver does) */
+		/* Some MMC drives reject READ HEADER for data tracks. Probe the
+		 * 2048-byte user-data path before treating such a track as audio. */
 		if(e->errnum == ErrorNumber_SCSI_CC_IllegalRequest)
 		{
+			SCSI_CREATEBLOCK(read,READ,10);
+			READ10_LBA_Write(read,addr);
+			READ10_TransferLength_Write(read,1);
+			e = DoSCSIOp(SCSIOP_READ|SCSIOP_NOESCAPE,read,sizeof(read),
+			             SCSIOp_MiscBuffer,2048,0,&result,blk,retries);
+			if(!e && result == 2048)
+			{
+				*datamode = DataMode_Data1;
+				return NULL;
+			}
 			*datamode = DataMode_Audio;
 			return NULL;
 		}
